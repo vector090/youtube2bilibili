@@ -18,9 +18,20 @@ OWNER_NAME = "username"
 REMOVE_FILE = True  # 是否删除投稿后的视频文件
 LineN = "qn"  # 线路 cos bda2 qn ws kodo
 DEFAULT_TID = 21
-PROXY = 'http://127.0.0.1:20171'
+PROXY = 'http://127.0.0.1:10809'
 COOKIES_FROM_BROWSER = ("firefox",)
 URL_LIST_FILE = "url_list.json"
+POTOKEN_PATH = "D:\\potoken.txt"
+
+def read_potoken():
+    """从文件读取potoken"""
+    try:
+        with open(POTOKEN_PATH, "r") as f:
+            potoken = f.read().strip()
+        return potoken
+    except Exception as e:
+        print(f"Error reading potoken: {e}")
+        return ""
 
 def escape_description(description):
     return shlex.quote(description)
@@ -34,19 +45,44 @@ def cover_webp_to_jpg(webp_path, jpg_path):
     im.close()
 
 def download(youtube_url, folder_name):
+    # 每次下载前读取最新的potoken
+    potoken = read_potoken()
+    full_potoken = "web.gvs+" + potoken
+    
     ydl_opts = {
         "outtmpl": "./videos/" + str(folder_name) + "/%(id)s.mp4",
         "cookiesfrombrowser": COOKIES_FROM_BROWSER,
-        'proxy': PROXY
+        "live_from_start": True,
+        "concurrent_fragment_downloads": 3,
+        "fragment_retries": 3,
+        "proxy": PROXY,
+        "extractor_args": {
+            "youtube": {
+                # Correct way to pass player_client
+                "player_client": ["default", "-tv", "web_safari", "web_embedded"],
+                # 使用从文件读取的potoken
+                "po_token": [full_potoken]
+            }
+        }
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([youtube_url])
 
 def get_info(url):
+    # 每次获取信息前读取最新的potoken
+    potoken = read_potoken()
+    full_potoken = "web.gvs+" + potoken
+    
     ydl_opts = {
         "cookiesfrombrowser": COOKIES_FROM_BROWSER,
-        'proxy': PROXY
+        'proxy': PROXY,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["default", "-tv", "web_safari", "web_embedded"],
+                "po_token": [full_potoken]
+            }
+        }
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
@@ -111,13 +147,38 @@ def cut_tags(tags):
         i += 1
     return tags
 
+def get_release_date(youtube_url):
+    # 每次获取信息前读取最新的potoken
+    potoken = read_potoken()
+    full_potoken = "web.gvs+" + potoken
+    
+    ydl_opts = {
+        'proxy': PROXY,
+        'cookiesfrombrowser': COOKIES_FROM_BROWSER,
+        'quiet': True,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["default", "-tv", "web_safari", "web_embedded"],
+                "po_token": [full_potoken]
+            }
+        }
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        result = ydl.extract_info(youtube_url, download=False, **{'force_generic_extractor': True})
+        release_date = result.get('upload_date')
+        if release_date:
+            return release_date[:4] + '年' + release_date[4:6] + '月' + release_date[6:] + '日'
+        return '未知日期'
+
 def biliup_upload(vUrl, TID, title, dynamic_title, description, tags, videoPath, cover):
+    release_date = get_release_date(vUrl)
+    desc = f"原视频日期{release_date}"
     strTags = ",".join(tags)
     CMD = (
-        ".\\biliup upload "
+         ".\\biliup upload "
         + videoPath
         + " --desc "
-        + "此为转载视频"
+        + get_double(desc)
         + " --copyright 2 "
         + "--tag "
         + get_double(strTags)
@@ -202,8 +263,11 @@ def mode_single_video():
     process_video(url, tid)
 
 def mode_video_list():
+    potoken = read_potoken()
+    full_potoken = "web.gvs+" + potoken
+    
     url = input("请输入视频列表或频道URL: ")
-    os.system(f'yt-dlp --flat-playlist --dump-single-json --cookies-from-browser firefox --proxy {PROXY} {url} > output.json')
+    os.system(f'yt-dlp --flat-playlist --dump-single-json --cookies-from-browser firefox --proxy {PROXY} --extractor-args youtube:po_token={full_potoken} {url} > output.json')
 
     with open('output.json', 'r', encoding='utf-8') as f:
         data = json.load(f)
