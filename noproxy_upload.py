@@ -11,15 +11,19 @@ import yt_dlp
 from PIL import Image
 import io
 
+import pdb;
+#import pdb; pdb.set_trace()
+
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
-OWNER_NAME = "username"
+OWNER_NAME = "vector090_"
 REMOVE_FILE = True  # 是否删除投稿后的视频文件
 LineN = "qn"  # 线路 cos bda2 qn ws kodo
 DEFAULT_TID = 21
 COOKIES_FROM_BROWSER = ("firefox",)
 URL_LIST_FILE = "url_list.json"
+VIDEOS_DIR="/host/tmp/videos/"
 
 def escape_description(description):
     return shlex.quote(description)
@@ -34,8 +38,9 @@ def cover_webp_to_jpg(webp_path, jpg_path):
 
 def download(youtube_url, folder_name):
     ydl_opts = {
-        "outtmpl": "./videos/" + str(folder_name) + "/%(id)s.mp4",
-        "cookiesfrombrowser": COOKIES_FROM_BROWSER
+        "outtmpl": VIDEOS_DIR + str(folder_name) + "/%(id)s.mp4",
+        #"cookiesfrombrowser": COOKIES_FROM_BROWSER
+        "cookiesfile": "/root/ext-ex/www.youtube.com_cookies.txt"
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -43,14 +48,16 @@ def download(youtube_url, folder_name):
 
 def get_info(url):
     ydl_opts = {
-        "cookiesfrombrowser": COOKIES_FROM_BROWSER
+        #"cookiesfrombrowser": COOKIES_FROM_BROWSER
+        "cookiesfile": "/root/ext-ex/www.youtube.com_cookies.txt"
     }
+    #pdb.set_trace()
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
         return info
 
 def getVideoPath(id_):
-    path = "./videos/" + str(id_)
+    path = VIDEOS_DIR + str(id_)
     for root, dirs, files in os.walk(path):
         for file in files:
             if file.find(id_) != -1:
@@ -58,7 +65,7 @@ def getVideoPath(id_):
 
 def download_image(url, id_):
     r = requests.get(url, stream=True)
-    f = open("./videos/" + str(id_) + "/cover.webp", "wb")
+    f = open(VIDEOS_DIR + str(id_) + "/cover.webp", "wb")
     for chunk in r.iter_content(chunk_size=102400):
         if chunk:
             f.write(chunk)
@@ -107,7 +114,7 @@ def cut_tags(tags):
 def biliup_upload(vUrl, TID, title, dynamic_title, description, tags, videoPath, cover):
     strTags = ",".join(tags)
     CMD = (
-        ".\\biliup upload "
+        "./biliup upload "
         + videoPath
         + " --desc "
         + "此为转载视频"
@@ -136,6 +143,9 @@ def process_video(vUrl, TID):
         title = info["title"]
         dynamic_title = title
         author = info["uploader"]
+
+        title = info["title"] + ' ['+author+']'
+
         id_ = info["id"]
         description = info["description"]
         tags = info["tags"]
@@ -144,14 +154,14 @@ def process_video(vUrl, TID):
         tags.append(OWNER_NAME)
 
         try:
-            os.mkdir(path="./videos/" + str(id_))
+            os.mkdir(path=VIDEOS_DIR + str(id_))
         except FileExistsError:
-            shutil.rmtree("./videos/" + str(id_))
-            os.mkdir(path="./videos/" + str(id_))
+            shutil.rmtree(VIDEOS_DIR + str(id_))
+            os.mkdir(path=VIDEOS_DIR + str(id_))
 
         download(vUrl, id_)
         download_image(cover, id_)
-        cover_webp_to_jpg("./videos/" + str(id_) + "/cover.webp", "./videos/" + str(id_) + "/cover.jpg")
+        cover_webp_to_jpg(VIDEOS_DIR + str(id_) + "/cover.webp", VIDEOS_DIR + str(id_) + "/cover.jpg")
 
         if len(title) > 80:
             title = title[:80]
@@ -163,12 +173,12 @@ def process_video(vUrl, TID):
         tags = cut_tags(tags)
 
         videoPath = getVideoPath(id_)
-        cover_path = "./videos/" + str(id_) + "/cover.jpg"
+        cover_path = VIDEOS_DIR + str(id_) + "/cover.jpg"
 
         success = biliup_upload(vUrl, TID, title, dynamic_title, description, tags, videoPath, cover_path)
         
         if success and REMOVE_FILE:
-            shutil.rmtree("./videos/" + str(id_))
+            shutil.rmtree(VIDEOS_DIR + str(id_))
         
         return success
     except Exception as e:
@@ -196,7 +206,7 @@ def mode_single_video():
 
 def mode_video_list():
     url = input("请输入视频列表或频道URL: ")
-    os.system(f'yt-dlp --flat-playlist --dump-single-json --cookies-from-browser firefox {url} > output.json')
+    os.system(f'yt-dlp --flat-playlist --dump-single-json --cookies /root/ext-ex/www.youtube.com_cookies.txt {url} > output.json')
 
     with open('output.json', 'r', encoding='utf-8') as f:
         data = json.load(f)
@@ -248,12 +258,19 @@ def mode_resume_upload():
             save_url_list(url_list)
 
 def main():
+
+    try:
+      os.makedirs(name=VIDEOS_DIR)
+    except OSError as err:
+      #print(err)
+      pass
+
     print("请选择模式:")
     print("1: 单视频上传模式")
     print("2: 视频列表或频道模式")
     print("3: 断点续传模式")
     mode = input("请输入模式编号: ")
-    
+
     if mode == "1":
         mode_single_video()
     elif mode == "2":
