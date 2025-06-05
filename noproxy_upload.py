@@ -133,7 +133,7 @@ def biliup_upload(vUrl, TID, title, dynamic_title, description, tags, videoPath,
         + str(cover)
     )
     print("[🚀 origin title]: ", title)
-    print("[🚀 Start to using biliup, with these CMD commend]:\n", CMD)
+    print("[🚀 Start to using biliup, with these CMD commend]:\n", CMD, flush=True)
     biliupOutput = "".join(os.popen(CMD).readlines())
     return "投稿成功" in biliupOutput or "标题相同" in biliupOutput
 
